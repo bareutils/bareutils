@@ -1,0 +1,3 @@
+[submodule "barelib"]
+	path = barelib
+	url = https://github.com/bareutils/barelib
