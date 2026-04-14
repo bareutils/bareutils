@@ -1,0 +1,16 @@
+#!/bin/sh
+echo "=> Stage 1: Initializing system..."
+echo "   Mounting filesystems..."
+mount -a -t nonfs,nfs4,smbfs,cifs -O no_netdev
+if [ -s /etc/hostname ]; then
+    echo "   Setting hostname..."
+    cat /etc/hostname > /proc/sys/kernel/hostname
+fi
+echo "   Configuring loopback interface..."
+ip link set up dev lo
+echo "   Cleaning /tmp..."
+rm -rf /tmp/* /tmp/.* 2>/dev/null
+mkdir -p /tmp/.ICE-unix /tmp/.X11-unix
+chmod 1777 /tmp /tmp/.ICE-unix /tmp/.X11-unix
+echo "=> Stage 1 done."
+exit 0

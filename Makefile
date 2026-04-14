@@ -14,7 +14,7 @@ EXDIR = src
 BIN_SRCS := $(wildcard src/*.c)
 BINS := $(patsubst src/%.c,$(BINDIR)/%,$(BIN_SRCS))
 BINARIES := $(BINS)
-.PHONY: all bins clean debug release install uninstall
+.PHONY: all bins clean debug release install uninstall examples
 TARGETS := $(BINS)
 all: bins
 bins: $(TARGETS)
@@ -23,7 +23,13 @@ debug release:
 include $(BARELIB_PREFIX)/maketools/build.mk
 include $(BARELIB_PREFIX)/maketools/install.mk
 include $(BARELIB_PREFIX)/maketools/configure.mk
-install: install-bin
-uninstall: uninstall-bin
+examples:
+	@mkdir -p $(OUTDIR)/etc/runit/services/getty-tty1
+	@cp -r examples/runit $(OUTDIR)/etc
+	@chmod +x $(OUTDIR)/etc/runit/1
+	@chmod +x $(OUTDIR)/etc/runit/2
+	@chmod +x $(OUTDIR)/etc/runit/3
+	@chmod +x $(OUTDIR)/etc/runit/ctrlaltdel
+	@chmod +x $(OUTDIR)/etc/runit/services/getty-tty1/run
 todos:
 	@grep -rni --color "TODO:" src include

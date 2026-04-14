@@ -1,0 +1,18 @@
+#!/bin/sh
+echo "=> Stage 3: Shutting down system..."
+echo "   Deconfiguring network..."
+ip link set down dev eth0 2>/dev/null
+ip link set down dev wlan0 2>/dev/null
+echo "   Sending SIGTERM to all processes..."
+killall5 -15
+sleep 3
+echo "   Sending SIGKILL to all processes..."
+killall5 -9
+echo "   Saving random seed..."
+dd if=/dev/urandom of=/var/lib/random-seed count=1 bs=512 2>/dev/null
+echo "   Unmounting filesystems..."
+umount -a -r 2>/dev/null
+echo "   Remounting rootfs read-only..."
+mount -o remount,ro /
+echo "=> Stage 3 done. System halt."
+exit 0

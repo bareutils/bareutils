@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "=> Stage 2: Starting service supervision..."
+exec msvd /etc/service

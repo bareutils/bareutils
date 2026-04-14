@@ -17,7 +17,18 @@ static bool flag_sort_size = false;
 static bool flag_reverse   = false;
 static bool flag_color     = false;
 static bool flag_one       = false;
+static bool flag_classify  = false;
+static bool flag_almost_all = false;
 static bool flag_help      = false;
+
+static char get_classifier(const bare_entry_t *e) {
+    if (e->type == BARE_FT_DIR) return '/';
+    if (e->type == BARE_FT_LINK) return '@';
+    if (e->type == BARE_FT_FIFO) return '|';
+    if (e->type == BARE_FT_SOCK) return '=';
+    if (e->type == BARE_FT_REG && (e->mode & (S_IXUSR | S_IXGRP | S_IXOTH))) return '*';
+    return '\0';
+}
 static void apply_color(FILE *f, const bare_entry_t *e) {
     if (!bare_isatty(f)) return;
     if (e->type == BARE_FT_DIR) {
@@ -52,6 +63,11 @@ static void print_long(const bare_entry_t *e, bool human) {
     printf("%s", e->name);
     if (flag_color) bare_color_reset(stdout);
 
+    if (flag_classify) {
+        char c = get_classifier(e);
+        if (c) putchar(c);
+    }
+
     if (e->type == BARE_FT_LINK) {
         char lbuf[4096];
         ssize_t ln = readlink(e->path, lbuf, sizeof(lbuf) - 1);
@@ -59,10 +75,6 @@ static void print_long(const bare_entry_t *e, bool human) {
             lbuf[ln] = '\0';
             printf(" -> %s", lbuf);
         }
-    }
-
-    if (e->type == BARE_FT_DIR) {
-        printf("/");
     }
 
     putchar('\n');
@@ -77,16 +89,26 @@ static void ls_dir(const char *path) {
     if (err != BARE_OK)
         bare_die_err("ls", err);
 
-    if (!flag_all) {
-        size_t j = 0;
-        for (size_t i = 0; i < dir.count; i++) {
+    size_t j = 0;
+    for (size_t i = 0; i < dir.count; i++) {
+        bool show = false;
+        if (flag_all) {
+            show = true;
+        } else if (flag_almost_all) {
+            if (strcmp(dir.items[i].name, ".") != 0 && strcmp(dir.items[i].name, "..") != 0)
+                show = true;
+        } else {
             if (!dir.items[i].is_hidden)
-                dir.items[j++] = dir.items[i];
-            else
-                bare_entry_free(&dir.items[i]);
+                show = true;
         }
-        dir.count = j;
+
+        if (show) {
+            dir.items[j++] = dir.items[i];
+        } else {
+            bare_entry_free(&dir.items[i]);
+        }
     }
+    dir.count = j;
 
     if (flag_sort_time)       bare_dir_sort_mtime(&dir);
     else if (flag_sort_size)  bare_dir_sort_size(&dir);
@@ -116,24 +138,36 @@ static void ls_dir(const char *path) {
     } else if (flag_one) {
         for (size_t i = 0; i < dir.count; i++) {
             if (flag_color) apply_color(stdout, &dir.items[i]);
-            if (dir.items[i].type != BARE_FT_DIR) {printf("%s", dir.items[i].name);} else {printf("%s/", dir.items[i].name);}
+            printf("%s", dir.items[i].name);
+            if (flag_classify) {
+                char c = get_classifier(&dir.items[i]);
+                if (c) putchar(c);
+            }
             if (flag_color) bare_color_reset(stdout);
             putchar('\n');
         }
     } else {
         int tw = bare_term_width();
         const char **names = bare_malloc(dir.count * sizeof(char *));
+        bool *allocated = bare_malloc(dir.count * sizeof(bool));
         for (size_t i = 0; i < dir.count; i++) {
-            if (dir.items[i].type == BARE_FT_DIR) {
-                char* name = bare_malloc(strlen(dir.items[i].name) + 1);
-                sprintf(name, "%s/", dir.items[i].name);
+            char c = flag_classify ? get_classifier(&dir.items[i]) : '\0';
+            if (c) {
+                char* name = bare_malloc(strlen(dir.items[i].name) + 2);
+                sprintf(name, "%s%c", dir.items[i].name, c);
                 names[i] = name;
+                allocated[i] = true;
             } else {
                 names[i] = dir.items[i].name;
+                allocated[i] = false;
             }
         }
         bare_print_columns(stdout, names, dir.count, tw);
-        free(names);
+        for (size_t i = 0; i < dir.count; i++) {
+            if (allocated[i]) bare_free((void *)names[i]);
+        }
+        bare_free((void *)names);
+        bare_free(allocated);
     }
 
     bare_dir_free(&dir);
@@ -144,13 +178,15 @@ int main(int argc, char **argv) {
     bare_cli_init(&cli, "ls", "ls [options] [file...]",
                   "List directory contents.");
 
-    bare_cli_add_opt(&cli, (bare_opt_t){ 'a', "all",       "show hidden entries",         BARE_OPT_BOOL,   {.bval=&flag_all},       false });
+    bare_cli_add_opt(&cli, (bare_opt_t){ 'a', "all",        "show hidden entries",         BARE_OPT_BOOL,   {.bval=&flag_all},        false });
+    bare_cli_add_opt(&cli, (bare_opt_t){ 'A', "almost-all", "do not list implicit . and ..", BARE_OPT_BOOL, {.bval=&flag_almost_all}, false });
     bare_cli_add_opt(&cli, (bare_opt_t){ 'l', "long",      "long listing format",         BARE_OPT_BOOL,   {.bval=&flag_long},      false });
     bare_cli_add_opt(&cli, (bare_opt_t){ 'h', "human",     "human-readable sizes",        BARE_OPT_BOOL,   {.bval=&flag_human},     false });
     bare_cli_add_opt(&cli, (bare_opt_t){ 't', "sort-time", "sort by modification time",   BARE_OPT_BOOL,   {.bval=&flag_sort_time}, false });
     bare_cli_add_opt(&cli, (bare_opt_t){ 'S', "sort-size", "sort by file size",           BARE_OPT_BOOL,   {.bval=&flag_sort_size}, false });
     bare_cli_add_opt(&cli, (bare_opt_t){ 'r', "reverse",   "reverse sort order",          BARE_OPT_BOOL,   {.bval=&flag_reverse},   false });
     bare_cli_add_opt(&cli, (bare_opt_t){ 'c', "color",     "colorize output",             BARE_OPT_BOOL,   {.bval=&flag_color},     false });
+    bare_cli_add_opt(&cli, (bare_opt_t){ 'F', "classify",  "append indicator (one of */=>@|) to entries", BARE_OPT_BOOL, {.bval=&flag_classify}, false });
     bare_cli_add_opt(&cli, (bare_opt_t){ '1', NULL,        "one entry per line",          BARE_OPT_BOOL,   {.bval=&flag_one},       false });
     bare_cli_add_opt(&cli, (bare_opt_t){ '?', "help",      "show this help and exit",     BARE_OPT_BOOL,   {.bval=&flag_help},      false });
     bare_cli_parse(&cli, argc, argv);
@@ -181,8 +217,13 @@ int main(int argc, char **argv) {
                     print_long(&entry, flag_human);
                 else {
                     if (flag_color) apply_color(stdout, &entry);
-                    printf("%s\n", entry.name);
+                    printf("%s", entry.name);
+                    if (flag_classify) {
+                        char c = get_classifier(&entry);
+                        if (c) putchar(c);
+                    }
                     if (flag_color) bare_color_reset(stdout);
+                    putchar('\n');
                 }
                 bare_entry_free(&entry);
             }
