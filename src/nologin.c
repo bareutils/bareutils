@@ -20,12 +20,15 @@ int main(int argc, char **argv) {
         return 0;
     }
     
-    FILE* fd = fopen("/etc/nologin.txt", "r");
+    FILE* fd = fopen("/etc/nologin", "r");
     if (fd) {
-        bare_die("nologin", "unable to read /etc/nologin.txt");
-        //neo: TODO: cat /etc/nologin.txt
+        char buf[256];
+        while (fgets(buf, sizeof(buf), fd)) {
+            fputs(buf, stderr);
+        }
+        fclose(fd);
     } else {
-        printf("This account is currently not available.\n");
+        fputs("This account is currently not available.\n", stderr);
     }
     bare_cli_free(&cli);
     return 1;

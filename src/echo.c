@@ -8,9 +8,6 @@
 #include <barextras.h>
 #include <barelib.h>
 #include <limits.h>
-
-char* esc(char* x) { return x; } //neo: TODO: implement escape sequences
-
 static bool flag_help = false;
 static bool flag_esc_e = false;
 static bool flag_esc_d = true; //neo: unused
@@ -31,8 +28,11 @@ int main(int argc, char **argv) {
     }
     unsigned int i = 0;
     do {
+        if (cli.positional[i] == NULL) { i++; continue; }
         if (flag_esc_e) {
-            printf("%s", esc(cli.positional[i]));
+            char *s = esc(cli.positional[i]);
+            printf("%s", s);
+            free(s);
             i++;
             continue;
         }

@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    if (!bare_clear(stdout)) { bare_die("clear", "Not a tty."); };
+    if (!bare_clear(stdout)) { bare_die("clear", "not a tty."); };
     bare_cli_free(&cli);
     return 0;
 }
