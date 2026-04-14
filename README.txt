@@ -1,4 +1,3 @@
-```
 bareutils
 =========
 
@@ -30,4 +29,4 @@ Example `.config.mk`:
 # disables the `ls` binary from compiling.
 $(BINDIR)/ls:
     $(DISABLED)
-```
+
