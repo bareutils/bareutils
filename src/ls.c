@@ -20,6 +20,42 @@ static bool flag_one       = false;
 static bool flag_classify  = false;
 static bool flag_almost_all = false;
 static bool flag_help      = false;
+static char *opt_block_size = NULL;
+static bool flag_ignore_backups = false;
+static bool flag_zero      = false;
+static bool flag_sort_extension = false;
+static bool flag_horizontal = false;
+static bool flag_recursive  = false;
+
+static long long parse_block_size(const char *s) {
+    if (!s) return 1;
+    char *end;
+    long long val = strtoll(s, &end, 10);
+    if (end == s) val = 1;
+    if (*end == '\0') return val;
+    long long mult = 1;
+    if (strcmp(end, "K") == 0 || strcmp(end, "KiB") == 0) mult = 1024LL;
+    else if (strcmp(end, "M") == 0 || strcmp(end, "MiB") == 0) mult = 1024LL * 1024;
+    else if (strcmp(end, "G") == 0 || strcmp(end, "GiB") == 0) mult = 1024LL * 1024 * 1024;
+    else if (strcmp(end, "T") == 0 || strcmp(end, "TiB") == 0) mult = 1024LL * 1024 * 1024 * 1024;
+    else if (strcmp(end, "KB") == 0) mult = 1000LL;
+    else if (strcmp(end, "MB") == 0) mult = 1000LL * 1000;
+    else if (strcmp(end, "GB") == 0) mult = 1000LL * 1000 * 1000;
+    else if (strcmp(end, "TB") == 0) mult = 1000LL * 1000 * 1000 * 1000;
+    return val * mult;
+}
+
+static int compare_extension(const void *a, const void *b) {
+    const bare_entry_t *ea = a;
+    const bare_entry_t *eb = b;
+    const char *exta = strrchr(ea->name, '.');
+    const char *extb = strrchr(eb->name, '.');
+    if (!exta) exta = "";
+    if (!extb) extb = "";
+    int res = strcmp(exta, extb);
+    if (res == 0) return strcmp(ea->name, eb->name);
+    return res;
+}
 
 static char get_classifier(const bare_entry_t *e) {
     if (e->type == BARE_FT_DIR) return '/';
@@ -49,10 +85,13 @@ static void print_long(const bare_entry_t *e, bool human) {
     char *tstr  = bare_fmt_time(e->mtime, NULL);
     char *owner = bare_fmt_owner(e->uid, e->gid);
 
+    long long bs = parse_block_size(opt_block_size);
     if (human) {
         char *sz = bare_fmt_size((unsigned long long)e->size);
         printf("%s %2lu %s %6s ", mode, (unsigned long)e->nlink, owner, sz);
         bare_free(sz);
+    } else if (bs > 1) {
+        printf("%s %2lu %s %8lld ", mode, (unsigned long)e->nlink, owner, (long long)((e->size + bs - 1) / bs));
     } else {
         printf("%s %2lu %s %8lld ", mode, (unsigned long)e->nlink, owner, (long long)e->size);
     }
@@ -102,6 +141,12 @@ static void ls_dir(const char *path) {
                 show = true;
         }
 
+        if (show && flag_ignore_backups) {
+            size_t len = strlen(dir.items[i].name);
+            if (len > 0 && dir.items[i].name[len-1] == '~')
+                show = false;
+        }
+
         if (show) {
             dir.items[j++] = dir.items[i];
         } else {
@@ -112,6 +157,7 @@ static void ls_dir(const char *path) {
 
     if (flag_sort_time)       bare_dir_sort_mtime(&dir);
     else if (flag_sort_size)  bare_dir_sort_size(&dir);
+    else if (flag_sort_extension) qsort(dir.items, dir.count, sizeof(bare_entry_t), compare_extension);
     else                      bare_dir_sort_name(&dir);
 
     if (flag_reverse) {
@@ -126,16 +172,19 @@ static void ls_dir(const char *path) {
         unsigned long long total = 0;
         for (size_t i = 0; i < dir.count; i++)
             total += (unsigned long long)dir.items[i].size;
+        long long bs = parse_block_size(opt_block_size);
         if (flag_human) {
             char *ts = bare_fmt_size(total);
             printf("total %s\n", ts);
             bare_free(ts);
+        } else if (bs > 1) {
+            printf("total %lld\n", (long long)((total + bs - 1) / bs));
         } else {
-            printf("total %llu\n", total / 2);
+            printf("total %llu\n", total / 1024);
         }
         for (size_t i = 0; i < dir.count; i++)
             print_long(&dir.items[i], flag_human);
-    } else if (flag_one) {
+    } else if (flag_one || flag_zero) {
         for (size_t i = 0; i < dir.count; i++) {
             if (flag_color) apply_color(stdout, &dir.items[i]);
             printf("%s", dir.items[i].name);
@@ -144,7 +193,7 @@ static void ls_dir(const char *path) {
                 if (c) putchar(c);
             }
             if (flag_color) bare_color_reset(stdout);
-            putchar('\n');
+            putchar(flag_zero ? '\0' : '\n');
         }
     } else {
         int tw = bare_term_width();
@@ -162,12 +211,38 @@ static void ls_dir(const char *path) {
                 allocated[i] = false;
             }
         }
-        bare_print_columns(stdout, names, dir.count, tw);
+        if (flag_horizontal) {
+            int col_width = 0;
+            for (size_t i = 0; i < dir.count; i++) {
+                int len = strlen(names[i]);
+                if (len > col_width) col_width = len;
+            }
+            col_width += 2;
+            int cols = tw / col_width;
+            if (cols < 1) cols = 1;
+            for (size_t i = 0; i < dir.count; i++) {
+                printf("%-*s", col_width, names[i]);
+                if ((i + 1) % cols == 0 || i + 1 == dir.count) putchar('\n');
+            }
+        } else {
+            bare_print_columns(stdout, names, dir.count, tw);
+        }
         for (size_t i = 0; i < dir.count; i++) {
             if (allocated[i]) bare_free((void *)names[i]);
         }
         bare_free((void *)names);
         bare_free(allocated);
+    }
+
+    if (flag_recursive) {
+        for (size_t i = 0; i < dir.count; i++) {
+            if (dir.items[i].type == BARE_FT_DIR && 
+                strcmp(dir.items[i].name, ".") != 0 && 
+                strcmp(dir.items[i].name, "..") != 0) {
+                printf("\n%s/%s:\n", path, dir.items[i].name);
+                ls_dir(dir.items[i].path);
+            }
+        }
     }
 
     bare_dir_free(&dir);
@@ -180,6 +255,12 @@ int main(int argc, char **argv) {
 
     bare_cli_add_opt(&cli, (bare_opt_t){ 'a', "all",        "show hidden entries",         BARE_OPT_BOOL,   {.bval=&flag_all},        false });
     bare_cli_add_opt(&cli, (bare_opt_t){ 'A', "almost-all", "do not list implicit . and ..", BARE_OPT_BOOL, {.bval=&flag_almost_all}, false });
+    bare_cli_add_opt(&cli, (bare_opt_t){ 0,   "block-size", "scale sizes by SIZE",         BARE_OPT_STRING, {.sval=&opt_block_size}, false });
+    bare_cli_add_opt(&cli, (bare_opt_t){ 'B', "ignore-backups", "do not list entries ending with ~", BARE_OPT_BOOL, {.bval=&flag_ignore_backups}, false });
+    bare_cli_add_opt(&cli, (bare_opt_t){ 0,   "zero",      "end each output line with NUL", BARE_OPT_BOOL,   {.bval=&flag_zero},      false });
+    bare_cli_add_opt(&cli, (bare_opt_t){ 'X', NULL,        "  sort by extension",           BARE_OPT_BOOL,   {.bval=&flag_sort_extension}, false });
+    bare_cli_add_opt(&cli, (bare_opt_t){ 'x', NULL,        "  list entries by lines",       BARE_OPT_BOOL,   {.bval=&flag_horizontal}, false });
+    bare_cli_add_opt(&cli, (bare_opt_t){ 'R', "recursive",  "list subdirectories recursively", BARE_OPT_BOOL, {.bval=&flag_recursive}, false });
     bare_cli_add_opt(&cli, (bare_opt_t){ 'l', "long",      "long listing format",         BARE_OPT_BOOL,   {.bval=&flag_long},      false });
     bare_cli_add_opt(&cli, (bare_opt_t){ 'h', "human",     "human-readable sizes",        BARE_OPT_BOOL,   {.bval=&flag_human},     false });
     bare_cli_add_opt(&cli, (bare_opt_t){ 't', "sort-time", "sort by modification time",   BARE_OPT_BOOL,   {.bval=&flag_sort_time}, false });
@@ -187,7 +268,7 @@ int main(int argc, char **argv) {
     bare_cli_add_opt(&cli, (bare_opt_t){ 'r', "reverse",   "reverse sort order",          BARE_OPT_BOOL,   {.bval=&flag_reverse},   false });
     bare_cli_add_opt(&cli, (bare_opt_t){ 'c', "color",     "colorize output",             BARE_OPT_BOOL,   {.bval=&flag_color},     false });
     bare_cli_add_opt(&cli, (bare_opt_t){ 'F', "classify",  "append indicator (one of */=>@|) to entries", BARE_OPT_BOOL, {.bval=&flag_classify}, false });
-    bare_cli_add_opt(&cli, (bare_opt_t){ '1', NULL,        "one entry per line",          BARE_OPT_BOOL,   {.bval=&flag_one},       false });
+    bare_cli_add_opt(&cli, (bare_opt_t){ '1', NULL,        "  one entry per line",          BARE_OPT_BOOL,   {.bval=&flag_one},       false });
     bare_cli_add_opt(&cli, (bare_opt_t){ '?', "help",      "show this help and exit",     BARE_OPT_BOOL,   {.bval=&flag_help},      false });
     bare_cli_parse(&cli, argc, argv);
     if (flag_help) {
