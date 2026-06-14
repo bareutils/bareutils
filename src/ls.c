@@ -236,8 +236,8 @@ static void ls_dir(const char *path) {
 
     if (flag_recursive) {
         for (size_t i = 0; i < dir.count; i++) {
-            if (dir.items[i].type == BARE_FT_DIR && 
-                strcmp(dir.items[i].name, ".") != 0 && 
+            if (dir.items[i].type == BARE_FT_DIR &&
+                strcmp(dir.items[i].name, ".") != 0 &&
                 strcmp(dir.items[i].name, "..") != 0) {
                 printf("\n%s/%s:\n", path, dir.items[i].name);
                 ls_dir(dir.items[i].path);
@@ -273,7 +273,7 @@ int main(int argc, char **argv) {
     bare_cli_parse(&cli, argc, argv);
     if (flag_help) {
         bare_cli_help(&cli);
-        printf("- bareutils %s", BAREUTILS_VERSION);
+        printf("- bareutils %s\n", BAREUTILS_VERSION);
         bare_cli_free(&cli);
         return 0;
     }

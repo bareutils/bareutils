@@ -7,7 +7,7 @@
 static bool flag_help = false;
 int main(int argc, char **argv) {
     bare_cli_t cli;
-    bare_cli_init(&cli, "clear", "clear", "Clear screen.");
+    bare_cli_init(&cli, "true", "true", "Exit with code indicating success.");
     bare_cli_add_opt(&cli, (bare_opt_t){ '?', "help", "show this help and exit", BARE_OPT_BOOL, {.bval=&flag_help}, false });
     bare_cli_parse(&cli, argc, argv);
     if (flag_help) {
@@ -17,7 +17,6 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    if (!bare_clear(stdout)) { bare_die("clear", "not a tty."); };
     bare_cli_free(&cli);
     return 0;
 }

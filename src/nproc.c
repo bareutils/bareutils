@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
     bare_cli_parse(&cli, argc, argv);
     if (flag_help) {
         bare_cli_help(&cli);
-        printf("- bareutils %s", BAREUTILS_VERSION);
+        printf("- bareutils %s\n", BAREUTILS_VERSION);
         bare_cli_free(&cli);
         return 0;
     }
@@ -58,16 +58,16 @@ int main(int argc, char **argv) {
 		    }
 	    }
     }
-    if (flag_ignore < count) { 
+    if (flag_ignore < count) {
         if (flag_ignore < 0) {
             char* msg = "invalid number: '";
             char* err = bare_malloc(strlen(msg) + sizeof(flag_ignore) + 1);
             sprintf(err, "%s%ld'", msg, flag_ignore);
             bare_die("nproc", err);
-        } 
+        }
         count -= flag_ignore;
     } else {
-        count = 1; 
+        count = 1;
     }
     printf("%u\n", count);
     bare_cli_free(&cli);

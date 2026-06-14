@@ -15,11 +15,11 @@ int main(int argc, char **argv) {
     bare_cli_parse(&cli, argc, argv);
     if (flag_help) {
         bare_cli_help(&cli);
-        printf("- bareutils %s", BAREUTILS_VERSION);
+        printf("- bareutils %s\n", BAREUTILS_VERSION);
         bare_cli_free(&cli);
         return 0;
     }
-    
+
     FILE* fd = fopen("/etc/nologin", "r");
     if (fd) {
         char buf[256];
