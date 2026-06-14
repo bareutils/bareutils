@@ -7,7 +7,7 @@
 static bool flag_help = false;
 int main(int argc, char **argv) {
     bare_cli_t cli;
-    bare_cli_init(&cli, "true", "true", "Exit with a status code indicating success.");
+    bare_cli_init(&cli, "false", "false", "Exit with a status code indicating failure.");
     bare_cli_add_opt(&cli, (bare_opt_t){ '?', "help", "show this help and exit", BARE_OPT_BOOL, {.bval=&flag_help}, false });
     bare_cli_parse(&cli, argc, argv);
     if (flag_help) {
@@ -16,5 +16,5 @@ int main(int argc, char **argv) {
     }
 
     bare_cli_free(&cli);
-    return 0;
+    return 1;
 }
