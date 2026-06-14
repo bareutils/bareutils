@@ -4,9 +4,10 @@
 #define _POSIX_C_SOURCE 200809L
 #define _DEFAULT_SOURCE
 #include <barelib.h>
-#include <stdlib.h>
 #include <stdio.h>
-#include <sys/file.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
 static bool flag_help = false;
 int main(int argc, char **argv) {
     bare_cli_t cli;
@@ -20,16 +21,29 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    FILE* fd = fopen("/etc/nologin", "r");
-    if (fd) {
-        char buf[256];
-        while (fgets(buf, sizeof(buf), fd)) {
-            fputs(buf, stderr);
-        }
-        fclose(fd);
-    } else {
-        fputs("This account is currently not available.\n", stderr);
+    int fd = open("/etc/nologin.txt", O_RDONLY);
+    if (fd == -1) {
+        ssize_t ignored = write(STDERR_FILENO, "This account is currently not available.\n", 41);
+        (void)ignored;
+        bare_cli_free(&cli);
+        return 1;
     }
+
+    off_t file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    void *buffer = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (buffer == MAP_FAILED) {
+        close(fd);
+        ssize_t ignored = write(STDERR_FILENO, "This account is currently not available.\n", 41);
+        (void)ignored;
+        bare_cli_free(&cli);
+        return 1;
+    }
+
+    ssize_t ignored = write(STDOUT_FILENO, buffer, file_size);
+    (void)ignored;
+    munmap(buffer, file_size);
+    close(fd);
     bare_cli_free(&cli);
     return 1;
 }
