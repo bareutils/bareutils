@@ -4,8 +4,34 @@
 #define _POSIX_C_SOURCE 200809L
 #define _DEFAULT_SOURCE
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 #include <sys/utsname.h>
+#include <sys/auxv.h>
 #include <barelib.h>
+static const char *cpuinfo_val(const char *key, char *buf, size_t bufsz) {
+    FILE *f = fopen("/proc/cpuinfo", "r");
+    if (!f) return NULL;
+    char line[512];
+    size_t klen = strlen(key);
+    while (fgets(line, sizeof(line), f)) {
+        if (strncmp(line, key, klen) == 0) {
+            char *p = line + klen;
+            while (*p == ' ' || *p == '\t') p++;
+            if (*p != ':') continue;
+            p++;
+            while (*p == ' ' || *p == '\t') p++;
+            char *nl = strchr(p, '\n');
+            if (nl) *nl = '\0';
+            strncpy(buf, p, bufsz - 1);
+            buf[bufsz - 1] = '\0';
+            fclose(f);
+            return buf;
+        }
+    }
+    fclose(f);
+    return NULL;
+}
 static bool flag_help = false;
 static bool flag_all = false;
 static bool flag_kernel_name = false;
@@ -51,8 +77,15 @@ int main(int argc, char **argv) {
     if (flag_kernel_release || flag_all) n += printf("%s%s", n ? " " : "", u.release);
     if (flag_kernel_version || flag_all) n += printf("%s%s", n ? " " : "", u.version);
     if (flag_machine || flag_all)    n += printf("%s%s", n ? " " : "", u.machine);
-    if (flag_processor)              n += printf("%sunknown", n ? " " : "");
-    if (flag_hardware_platform)      n += printf("%sunknown", n ? " " : "");
+    char proc_buf[256], hwplat_buf[256];
+    const char *proc = cpuinfo_val("model name", proc_buf, sizeof(proc_buf));
+    if (!proc) proc = "unknown";
+    const char *hwplat = cpuinfo_val("vendor_id", hwplat_buf, sizeof(hwplat_buf));
+    if (!hwplat) hwplat = "unknown";
+    if (flag_processor || (flag_all && strcmp(proc, "unknown") != 0))
+        n += printf("%s%s", n ? " " : "", proc);
+    if (flag_hardware_platform || (flag_all && strcmp(hwplat, "unknown") != 0))
+        n += printf("%s%s", n ? " " : "", hwplat);
     const char *os = u.sysname;
     if (strcmp(os, "Linux") == 0) os = "GNU/Linux"; //neo: speak the truth!
     if (flag_operating_system || flag_all) n += printf("%s%s", n ? " " : "", os);
