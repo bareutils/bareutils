@@ -26,7 +26,7 @@ static bool flag_zero      = false;
 static bool flag_sort_extension = false;
 static bool flag_horizontal = false;
 static bool flag_recursive  = false;
-
+static bool flag_directory  = false;
 static long long parse_block_size(const char *s) {
     if (!s) return 1;
     char *end;
@@ -84,7 +84,6 @@ static void print_long(const bare_entry_t *e, bool human) {
     char *mode  = bare_fmt_mode(e->mode);
     char *tstr  = bare_fmt_time(e->mtime, NULL);
     char *owner = bare_fmt_owner(e->uid, e->gid);
-
     long long bs = parse_block_size(opt_block_size);
     if (human) {
         char *sz = bare_fmt_size((unsigned long long)e->size);
@@ -97,11 +96,9 @@ static void print_long(const bare_entry_t *e, bool human) {
     }
 
     printf("%s ", tstr);
-
     if (flag_color) apply_color(stdout, e);
     printf("%s", e->name);
     if (flag_color) bare_color_reset(stdout);
-
     if (flag_classify) {
         char c = get_classifier(e);
         if (c) putchar(c);
@@ -125,9 +122,7 @@ static void print_long(const bare_entry_t *e, bool human) {
 static void ls_dir(const char *path) {
     bare_dir_t dir;
     bare_err_t err = bare_dir_read(path, &dir);
-    if (err != BARE_OK)
-        bare_die_err("ls", err);
-
+    if (err != BARE_OK) bare_die_err("ls", err);
     size_t j = 0;
     for (size_t i = 0; i < dir.count; i++) {
         bool show = false;
@@ -154,12 +149,10 @@ static void ls_dir(const char *path) {
         }
     }
     dir.count = j;
-
     if (flag_sort_time)       bare_dir_sort_mtime(&dir);
     else if (flag_sort_size)  bare_dir_sort_size(&dir);
     else if (flag_sort_extension) qsort(dir.items, dir.count, sizeof(bare_entry_t), compare_extension);
     else                      bare_dir_sort_name(&dir);
-
     if (flag_reverse) {
         for (size_t i = 0, j = dir.count - 1; i < j; i++, j--) {
             bare_entry_t tmp = dir.items[i];
@@ -261,6 +254,7 @@ int main(int argc, char **argv) {
     bare_cli_add_opt(&cli, (bare_opt_t){ 'X', NULL,        "  sort by extension",           BARE_OPT_BOOL,   {.bval=&flag_sort_extension}, false });
     bare_cli_add_opt(&cli, (bare_opt_t){ 'x', NULL,        "  list entries by lines",       BARE_OPT_BOOL,   {.bval=&flag_horizontal}, false });
     bare_cli_add_opt(&cli, (bare_opt_t){ 'R', "recursive",  "list subdirectories recursively", BARE_OPT_BOOL, {.bval=&flag_recursive}, false });
+    bare_cli_add_opt(&cli, (bare_opt_t){ 'd', "directory", "list directories themselves, not their contents", BARE_OPT_BOOL, {.bval=&flag_directory}, false });
     bare_cli_add_opt(&cli, (bare_opt_t){ 'l', "long",      "long listing format",         BARE_OPT_BOOL,   {.bval=&flag_long},      false });
     bare_cli_add_opt(&cli, (bare_opt_t){ 'h', "human",     "human-readable sizes",        BARE_OPT_BOOL,   {.bval=&flag_human},     false });
     bare_cli_add_opt(&cli, (bare_opt_t){ 't', "sort-time", "sort by modification time",   BARE_OPT_BOOL,   {.bval=&flag_sort_time}, false });
@@ -280,14 +274,35 @@ int main(int argc, char **argv) {
 
     if (!bare_isatty(stdout)) flag_color = false;
     if (cli.npositional == 0) {
-        ls_dir(".");
+        if (flag_directory) {
+            bare_entry_t entry = {0};
+            bare_err_t stat_err = bare_entry_stat(".", &entry);
+            if (stat_err != BARE_OK)
+                bare_die_err("ls", stat_err);
+            if (flag_long)
+                print_long(&entry, flag_human);
+            else {
+                if (flag_color) apply_color(stdout, &entry);
+                printf("%s", entry.name);
+                if (flag_classify) {
+                    char c = get_classifier(&entry);
+                    if (c) putchar(c);
+                }
+                if (flag_color) bare_color_reset(stdout);
+                putchar('\n');
+            }
+            bare_entry_free(&entry);
+        } else {
+            ls_dir(".");
+        }
     } else {
         for (size_t i = 0; i < cli.npositional; i++) {
-            if (cli.npositional > 1)
+            bool is_dir = bare_path_is_dir(cli.positional[i]);
+            if (cli.npositional > 1 && (!flag_directory || !is_dir))
                 printf("%s:\n", cli.positional[i]);
-            if (bare_path_is_dir(cli.positional[i]))
+            if (is_dir && !flag_directory) {
                 ls_dir(cli.positional[i]);
-            else {
+            } else {
                 bare_entry_t entry = {0};
                 if (bare_entry_stat(cli.positional[i], &entry) != BARE_OK) {
                     char* filename = bare_malloc(strlen(cli.positional[i] + 2));
