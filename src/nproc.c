@@ -14,8 +14,11 @@
 #ifdef __GLIBC__
 #define __USE_GNU
 #endif
+//neo: define _GNU_SOURCE because apparently musl uses that while glibc uses __USE_GNU
+#define _GNU_SOURCE
 #include <sched.h>
 #undef __USE_GNU
+#undef _GNU_SOURCE
 
 static bool flag_help = false;
 static long int flag_ignore = 0;
