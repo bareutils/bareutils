@@ -3,18 +3,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 #define _POSIX_C_SOURCE 200809L
 #define _DEFAULT_SOURCE
-#include <barelib.h>
-static bool flag_help = false;
-int main(int argc, char **argv) {
-    bare_cli_t cli;
-    bare_cli_init(&cli, "false", "false", "Exit with a status code indicating failure.");
-    bare_cli_add_opt(&cli, (bare_opt_t){ '?', "help", "show this help and exit", BARE_OPT_BOOL, {.bval=&flag_help}, false });
-    bare_cli_parse(&cli, argc, argv);
-    if (flag_help) {
-        bare_cli_help(&cli);
-        printf("- bareutils %s\n", BAREUTILS_VERSION);
-    }
-
-    bare_cli_free(&cli);
+int main() {
     return 1;
 }
